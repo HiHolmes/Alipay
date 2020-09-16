@@ -7,6 +7,7 @@ setScreenMetrics(1080, 2340);   //不要修改该行代码
 
 //读取配置文件，设置相应参数
 var config = require("./Modules/MODULE_CONFIGURE");
+const { force_retry } = require("./Modules/MODULE_CONFIGURE");
 var g_startTime   = config.startTime;
 var g_endTime     = config.endTime;
 var g_password    = config.password;
@@ -14,6 +15,7 @@ var g_passmode    = config.passmode;
 var g_is_cycle    = config.is_cycle;
 var g_help_friend = config.help_friend;
 var g_low_power   = config.low_power;
+var g_force_retry = config.force_retry;
 
 //六球坐标值
 var g_energy_postion = [[250, 750], [350, 700], [450, 650], [600, 650], [750, 700], [850, 750]];
@@ -40,11 +42,10 @@ function getScreenCapturePermission()
 {//建议永久开启截图权限，在"取消"按键的上方，部分设备看不见，但是是存在的可以点击
     if (!requestScreenCapture())
     {
-        toast("获取截图权限失败，脚本退出");
-        console.error("获取截图权限失败，脚本退出");
+        logger("获取截图权限失败，脚本退出", 9);
         exit();
     }
-    toastLog("获取截图权限成功，等待支付宝启动");
+    logger("获取截图权限成功，等待支付宝启动", 3);
     sleep(1000);
 }
 /**
@@ -55,8 +56,7 @@ function registerExitEvent()
     var thread = threads.start(function(){
         events.observeKey();
         events.onKeyDown("volume_down", function(event){
-            toast("音量下键被按下，脚本退出");
-            console.warn("音量下键被按下，脚本退出");
+            logger("音量下键被按下，脚本退出", 5);
             exit();
         });
     });
@@ -90,9 +90,12 @@ function openAlipay()
     //寻找支付宝首页
     if (!findHomePage())
     {//未找到，退出脚本
-        toast("寻找支付宝首页失败，脚本退出");
-        console.error("寻找支付宝首页失败，脚本退出");
-        exit();
+        if (g_force_retry) {
+            tryAgain("寻找支付宝首页失败", 1000);
+        } else {
+            logger("寻找支付宝首页失败，脚本退出", 9);
+            exit();
+        }
     }
     else
     {//找到则点击
@@ -102,8 +105,12 @@ function openAlipay()
             let pos = item.bounds();
             if(!click(pos.centerX(), pos.centerY()))
             {
-                console.error("打开支付宝首页失败，脚本退出");
-                exit();
+                if (g_force_retry) {
+                    tryAgain("打开支付宝首页失败", 1000);
+                } else {
+                    logger("打开支付宝首页失败，脚本退出", 9);
+                    exit();
+                }
             }
         }
         console.log("成功找到支付宝首页");
@@ -122,13 +129,16 @@ function entranceAntForest()
         item = className("android.widget.TextView").text("蚂蚁森林").findOnce(); 
         if (item != null) break;
         swipe(520, 500, 520, 1500, 500);
-        sleep(500);
+        sleep(200);
     }
     if (item == null)
     {
-        toast("首页上没有蚂蚁森林，退出脚本");
-        console.error("首页上没有蚂蚁森林，退出脚本");
-        exit();
+        if (g_force_retry) {
+            tryAgain("首页上没有蚂蚁森林", 1000);
+        } else {
+            logger("首页上没有蚂蚁森林，退出脚本", 9);
+            exit();
+        }
     }
     else
     {
@@ -144,9 +154,12 @@ function entranceAntForest()
     }
     if (i >= 10) 
     {
-        toast("进入蚂蚁森林主页失败，退出脚本");
-        //exit();
-        tryAgain("进入蚂蚁森林主页失败", 1000);
+        if (g_force_retry) {
+            tryAgain("进入蚂蚁森林主页失败", 1000);
+        } else {
+            logger("进入蚂蚁森林主页失败，退出脚本", 9);
+            exit();
+        }
     }
     else
     {
@@ -166,22 +179,28 @@ function entranceAntForest()
         item = text("查看更多好友").findOnce();
         if(item != null && item.bounds().height() > 100) break;
         swipe(520, 1800, 520, 300, 500);
-        sleep(500);
+        sleep(200);
     }
     if (item == null)
     {
-        toast("没有找到查看更多好友，退出脚本");
-        //exit();
-        tryAgain("没有找到查看更多好友", 1000);
+        if (g_force_retry) {
+            tryAgain("没有找到查看更多好友", 1000);
+        } else {
+            logger("没有找到查看更多好友，退出脚本", 9);
+            exit();
+        }
     }
     else
     {
         let pos = item.bounds();
         if (!click(pos.centerX(), pos.centerY()))
         {
-            toast("进入好友排行榜失败，退出脚本");
-            //exit();
-            tryAgain("进入好友排行榜失败", 1000);
+            if (g_force_retry) {
+                tryAgain("进入好友排行榜失败", 1000);
+            } else {
+                logger("进入好友排行榜失败，退出脚本", 9);
+                exit();
+            }
         }
         else
         {
@@ -199,6 +218,22 @@ function entranceAntForest()
         }
     }
 }
+/**
+ * 日志打印
+ * @param {*} msg 日志信息
+ * @param {*} level 打印级别 4bit表示
+ * 前3bit表示console的级别：001->info 010->warn 100->error
+ * 最后1bit表示是否打印toast：0->不打印 1->打印
+ */
+function logger(msg, level) {
+    if (typeof(level) == "undefined") level = 0; // 默认不打印
+    if (level > 15) return;
+    if (level & 1) toast(msg);
+    if (level & 2) console.info(msg);
+    if (level & 4) console.warn(msg);
+    if (level & 8) console.error(msg);
+}
+
 /**
  * 根据名称查找并点击控件 返回null表示查找失败 返回false表示点击失败 返回true表示成功
  * @param {*} click_name 控件名称
@@ -254,8 +289,7 @@ function getCaptureImg()
     sleep(100);
     if (img == null || typeof(img) == "undefined")
     {
-        toast("截图失败，脚本退出");
-        console.error("截图失败，脚本退出");
+        logger("截图失败，脚本退出", 9);
         exit();
     }
     else
@@ -321,12 +355,12 @@ function entranceFriendsRank()
     while (epoint == null)
     {
         swipe(520, 1800, 520, 800, 500);
-        sleep(500);
+        sleep(200);
         epoint = getHasEnergyFriends();
         //如果检测到结尾，同时也没有可收能量的好友，那么结束收取
         if (epoint == null && arriveRankBottom())
         {
-            toastLog("没有更多好友了");
+            logger("没有更多好友了", 3);
             return true;
         }
         //如果连续32次都未检测到可收集好友,无论如何停止查找
@@ -379,11 +413,11 @@ function tryAgain(errmsg, delay)
     var timea = 60 * Number(time_a[0]) + Number(time_a[1]);
     var timeb = 60 * Number(time_b[0]) + Number(time_b[1]);
     var time  = 60 * hour + minu;
-    if(time >= timea && time <= timeb)
-        console.error(errmsg + ", 当前时间仍在监控范围内, 即将重试");
-    else
-    {
-        console.error(errmsg + ", 当前时间不在监控范围内, 退出脚本");
+    if(time >= timea && time <= timeb) {
+        logger(errmsg + ", 当前时间仍在监控范围内, 即将重试", 9);
+    }
+    else{
+        logger(errmsg + ", 当前时间不在监控范围内, 退出脚本", 9);
         exit();
     }
         
@@ -497,6 +531,6 @@ function main()
         device.setBrightness(light);
     }
     //退出脚本
-    toastLog("运行结束，退出脚本");
+    logger("运行结束，退出脚本", 3);
     exit();
 }
